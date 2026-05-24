@@ -161,20 +161,167 @@ INNER JOIN products p
 GROUP BY c.customer_name
 ORDER BY total_sales DESC;
 
-
-//Pendiente
 CREATE VIEW vw_sales_by_customer AS
-SELECT 
-	c.customer_name,
+SELECT
+    c.customer_name,
     c.country,
     SUM(p.price * oi.quantity) AS total_sales
 FROM customers c
 INNER JOIN orders o
-	ON c.customer_id = o.customer_id
-INNER JOIN order_items oi 
-	ON o.order_id = oi.order_id
-INNER JOIN products p 
-	ON oi.product_id = p.product_id
-GROUP BY 
-	c.customer_name,
+    ON c.customer_id = o.customer_id
+INNER JOIN order_items oi
+    ON o.order_id = oi.order_id
+INNER JOIN products p
+    ON oi.product_id = p.product_id
+GROUP BY
+    c.customer_name,
     c.country;
+    
+SELECT *
+FROM vw_sales_by_customer;
+
+CREATE VIEW vw_sales_by_country AS
+SELECT
+    c.country,
+    SUM(p.price * oi.quantity) AS total_sales
+FROM customers c
+INNER JOIN orders o
+    ON c.customer_id = o.customer_id
+INNER JOIN order_items oi
+    ON o.order_id = oi.order_id
+INNER JOIN products p
+    ON oi.product_id = p.product_id
+GROUP BY c.country;
+
+SELECT *
+FROM vw_sales_by_country;
+
+CREATE VIEW vw_top_products AS
+SELECT
+    p.product_name,
+    SUM(oi.quantity) AS units_sold
+FROM products p
+INNER JOIN order_items oi
+    ON p.product_id = oi.product_id
+GROUP BY p.product_name
+ORDER BY units_sold DESC;
+
+SELECT *
+FROM vw_top_products;
+
+CREATE TABLE etl_log(
+	log_id INT AUTO_INCREMENT PRIMARY KEY,
+    process_name VARCHAR(100),
+    execution_date DATETIME,
+    rows_processed INT,
+    status VARCHAR(20)
+);
+
+INSERT INTO etl_log 
+(
+	process_name,
+    execution_date,
+    rows_processed,
+    status
+)
+VALUES
+(
+	'Customer load',
+    NOW(),
+    (SELECT COUNT(*) FROM customers),
+    'SUCCESS'
+);
+
+INSERT INTO etl_log
+(
+	process_name,
+    execution_date,
+    rows_processed,
+    status
+)
+VALUES
+(
+	'Product load',
+    NOW(),
+    (SELECT COUNT(*) FROM products),
+    'SUCCESS'
+);
+
+SELECT * 
+FROM etl_log
+ORDER BY execution_date DESC;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_customer_count()
+BEGIN
+
+	SELECT COUNT(*) AS total_customers
+    FROM customers;
+    
+END $$
+
+DELIMITER ;
+
+CALL sp_customer_count();
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_log_customer_load()
+BEGIN
+
+    INSERT INTO etl_log
+    (
+        process_name,
+        execution_date,
+        rows_processed,
+        status
+    )
+    VALUES
+    (
+        'Customer Load',
+        NOW(),
+        (SELECT COUNT(*) FROM customers),
+        'SUCCESS'
+    );
+
+END $$
+
+DELIMITER ;
+
+CALL sp_log_customer_load();
+
+SELECT *
+FROM etl_log;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_customer_count()
+BEGIN
+
+	SELECT COUNT(*) AS total_customers
+    FROM customers;
+    
+END $$
+
+DELIMITER ;
+
+CALL sp_customer_count();
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_sales_by_country()
+BEGIN
+
+	SELECT
+		country,
+        total_sales
+	FROM vw_sales_by_country
+    ORDER BY total_sales DESC;
+    
+END $$
+
+DELIMITER ;
+
+CALL sp_sales_by_country();
+    
