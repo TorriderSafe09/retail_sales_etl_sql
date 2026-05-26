@@ -424,3 +424,169 @@ LIMIT 1;
 SHOW PROCEDURE STATUS
 WHERE Db = 'retail_etl';
 
+-- 09 Triggers de Auditoria
+CREATE TABLE audit_customers(
+	audit_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    action_type VARCHAR(20),
+    action_date DATETIME
+);
+
+-- Validacion
+DESCRIBE audit_customers;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_customer_insert
+AFTER INSERT
+ON customers
+FOR EACH ROW
+BEGIN
+
+	INSERT INTO audit_customers
+    (
+			customer_id,
+            action_type,
+            action_date
+    )VALUES
+    (
+		NEW.customer_id,
+        'INSERT',
+        NOW()
+    );
+    
+END $$
+
+DELIMITER ;
+
+-- Validacion 
+SHOW TRIGGERS;
+
+-- Probar Trigger
+INSERT INTO customers 
+VALUES
+(
+	99,
+    'Test Customer',
+    'testcustomer@gmail.com',
+    'Mexico'
+);
+
+-- Verificar auditoria
+SELECT *
+FROM audit_customers;
+
+-- Otra prueba
+INSERT INTO customers
+VALUES
+(
+	100,
+    'Audit Test',
+    'audittest@gmail.com',
+    'Canada'
+);
+
+-- verificacion
+SELECT *
+FROM audit_customers
+ORDER BY audit_id DESC;
+
+-- Verificacion final
+SELECT COUNT(*)
+FROM audit_customers;
+
+CREATE TABLE audit_customer_updates(
+	audit_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    old_name VARCHAR(100),
+    new_name VARCHAR(100),
+    update_date DATETIME
+);
+
+-- Trigger
+DELIMITER $$
+
+CREATE TRIGGER trg_customer_update
+AFTER UPDATE 
+ON customers
+FOR EACH ROW
+BEGIN
+
+	INSERT INTO audit_customer_updates
+    (
+        customer_id,
+        old_name,
+        new_name,
+        update_date
+    )VALUES(
+		OLD.customer_id,
+        OLD.customer_name,
+        NEW.customer_name,
+        NOW()
+    );
+
+END $$
+
+DELIMITER ;
+
+-- Validar
+UPDATE customers
+SET customer_name = 'Paco Torres'
+WHERE customer_id = 1;
+
+-- VERIFICAR
+SELECT *
+FROM audit_customer_updates;
+
+-- Trigger
+DELIMITER $$
+
+CREATE TRIGGER trg_validate_quantity
+BEFORE INSERT 
+ON order_items
+FOR EACH ROW
+BEGIN
+
+	IF NEW.quantity <= 0 THEN
+    
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Qauantity must be greater than zero';
+        
+	END IF;
+    
+END $$
+
+DELIMITER ;
+
+-- verificacion 
+SHOW TRIGGERS;
+
+-- Prueba 
+INSERT INTO order_items
+VALUES
+(
+	99,
+    1001,
+    101,
+    1
+);
+
+-- Verificacion
+SELECT *
+FROM order_items
+WHERE order_item_id = 99;
+
+-- Prueba invalida
+INSERT INTO order_items
+VALUES
+(
+	100,
+    1001,
+    101,
+    -5
+);
+
+-- Validacion final
+SELECT *
+FROM order_items
+WHERE order_item_id = 100;
