@@ -1,78 +1,114 @@
 -- 01 Create_Database
+
 CREATE DATABASE IF NOT EXISTS retail_etl;
 
 USE retail_etl;
 
+-- Disable safe updates for staging data cleansing
 SET SQL_SAFE_UPDATES = 0;
 
--- Validaciones
-SELECT DATABASE ();
+-- Validation
+SELECT DATABASE();
 
 -- 02 Raw_Tables
-CREATE TABLE raw_customers(
+
+CREATE TABLE IF NOT EXISTS raw_customers(
     customer_id INT,
     customer_name VARCHAR(100),
     email VARCHAR(150),
     country VARCHAR(50)
 );
 
-CREATE TABLE raw_products(
+CREATE TABLE IF NOT EXISTS raw_products(
     product_id INT,
     product_name VARCHAR(100),
     category VARCHAR(50),
     price DECIMAL(10,2)
 );
 
-CREATE TABLE raw_orders(
+CREATE TABLE IF NOT EXISTS raw_orders(
     order_id INT,
     customer_id INT,
     order_date DATE
 );
 
-CREATE TABLE raw_order_items(
+CREATE TABLE IF NOT EXISTS raw_order_items(
     order_item_id INT,
     order_id INT,
     product_id INT,
     quantity INT
 );
 
--- Validaciones 
+-- Validation
 SHOW TABLES;
 
 -- 03 Load_Raw_Data
-INSERT INTO raw_customers VALUES
+
+INSERT INTO raw_customers
+(
+    customer_id,
+    customer_name,
+    email,
+    country
+)VALUES
 (1,'Juan Perez','juan@gmail.com','Mexico'),
 (2,' María Lopez ','maría@gmail.com','Mexico'),
 (3,'Pedro García','pedro@gmail.com','Canada'),
 (4,'Juan Perez','juan@gmail.com','Mexico'),
 (5,'Ana Torres',NULL,'USA');
 
-INSERT INTO raw_products VALUES
+INSERT INTO raw_products
+(
+    product_id,
+    product_name,
+    category,
+    price
+)
+VALUES
 (101,'Laptop','Technology',25000),
 (102,'Mouse','Technology',500),
 (103,'Keyboard','Technology',1200),
 (104,'Monitor','Technology',4500);
 
-INSERT INTO raw_orders VALUES
+INSERT INTO raw_orders
+(
+    order_id,
+    customer_id,
+    order_date
+)
+VALUES
 (1001,1,'2025-01-10'),
 (1002,2,'2025-01-11'),
 (1003,3,'2025-01-12'),
 (1004,5,'2025-01-13');
 
-INSERT INTO raw_order_items VALUES
+INSERT INTO raw_order_items
+(
+    order_item_id,
+    order_id,
+    product_id,
+    quantity
+)
+VALUES
 (1,1001,101,1),
 (2,1001,102,2),
 (3,1002,103,1),
 (4,1003,104,2),
 (5,1004,102,5);
 
--- Validaciones
+-- Validation
 SELECT COUNT(*) FROM raw_customers;
 SELECT COUNT(*) FROM raw_products;
 SELECT COUNT(*) FROM raw_orders;
 SELECT COUNT(*) FROM raw_order_items;
 
+SELECT *
+FROM raw_customers;
+
 -- 04 Staging
+
+DROP TABLE IF EXISTS stg_customers;
+
 CREATE TABLE stg_customers AS
 SELECT *
 FROM raw_customers;
@@ -81,19 +117,29 @@ UPDATE stg_customers
 SET customer_name = TRIM(customer_name);
 
 UPDATE stg_customers
-SET email = 'unknown@gmail.com'
+SET email = 'unknown@example.com'
 WHERE email IS NULL;
 
--- Validaciones
+-- Validations
 SELECT *
 FROM stg_customers;
+
 SELECT COUNT(*)
 FROM stg_customers;
+
 SELECT COUNT(*)
 FROM stg_customers
 WHERE email IS NULL;
 
 -- 05 Core_Tables
+
+-- Delete tables if they exist (correct order by Foreign Keys)
+DROP TABLE IF EXISTS order_items;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS customers;
+
+-- Customers
 CREATE TABLE customers (
     customer_id INT PRIMARY KEY,
     customer_name VARCHAR(100) NOT NULL,
@@ -102,51 +148,84 @@ CREATE TABLE customers (
 );
 
 INSERT INTO customers
+(
+    customer_id,
+    customer_name,
+    email,
+    country
+)
 SELECT
     MIN(customer_id),
     customer_name,
     email,
     country
 FROM stg_customers
-GROUP BY customer_name,email,country;
+GROUP BY
+    customer_name,
+    email,
+    country;
 
+-- Validation
 SELECT *
 FROM customers;
 
+-- Products
 CREATE TABLE products(
     product_id INT PRIMARY KEY,
     product_name VARCHAR(100) NOT NULL,
     category VARCHAR(50),
-    price DECIMAL(10,2)
+    price DECIMAL(10,2) NOT NULL
 );
 
 INSERT INTO products
-SELECT *
+(
+    product_id,
+    product_name,
+    category,
+    price
+)
+SELECT
+    product_id,
+    product_name,
+    category,
+    price
 FROM raw_products;
 
+-- Validation
 SELECT *
 FROM products;
 
+-- Orders
 CREATE TABLE orders(
     order_id INT PRIMARY KEY,
-    customer_id INT,
-    order_date DATE,
+    customer_id INT NOT NULL,
+    order_date DATE NOT NULL,
     FOREIGN KEY (customer_id)
         REFERENCES customers(customer_id)
 );
 
 INSERT INTO orders
-SELECT *
+(
+    order_id,
+    customer_id,
+    order_date
+)
+SELECT
+    order_id,
+    customer_id,
+    order_date
 FROM raw_orders;
 
+-- Validation
 SELECT *
 FROM orders;
 
+-- Order Items
 CREATE TABLE order_items(
     order_item_id INT PRIMARY KEY,
-    order_id INT,
-    product_id INT,
-    quantity INT,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL,
     FOREIGN KEY (order_id)
         REFERENCES orders(order_id),
     FOREIGN KEY (product_id)
@@ -154,26 +233,45 @@ CREATE TABLE order_items(
 );
 
 INSERT INTO order_items
-SELECT *
+(
+    order_item_id,
+    order_id,
+    product_id,
+    quantity
+)
+SELECT
+    order_item_id,
+    order_id,
+    product_id,
+    quantity
 FROM raw_order_items;
 
+-- Validation
 SELECT *
 FROM order_items;
 
--- Validaciones
-SELECT COUNT(*)
+-- Data Quality Validations
+
+-- Total loaded clients
+SELECT COUNT(*) AS total_customers
 FROM customers;
+
+-- Check orders without client
 SELECT *
 FROM orders o
 LEFT JOIN customers c
-ON o.customer_id = c.customer_id
+    ON o.customer_id = c.customer_id
 WHERE c.customer_id IS NULL;
+
+-- Check duplicate emails
 SELECT
     email,
     COUNT(*) AS total
 FROM customers
 GROUP BY email
 HAVING COUNT(*) > 1;
+
+-- Check sales by customer
 SELECT
     c.customer_name,
     SUM(p.price * oi.quantity) AS total_sales
@@ -188,6 +286,7 @@ GROUP BY c.customer_name
 ORDER BY total_sales DESC;
 
 -- 06 Views
+
 DROP VIEW IF EXISTS vw_sales_by_customer;
 DROP VIEW IF EXISTS vw_sales_by_country;
 DROP VIEW IF EXISTS vw_top_products;
@@ -210,6 +309,8 @@ GROUP BY
     
 SELECT *
 FROM vw_sales_by_customer;
+SELECT COUNT(*)
+FROM vw_sales_by_customer;
 
 CREATE VIEW vw_sales_by_country AS
 SELECT
@@ -226,11 +327,14 @@ GROUP BY c.country;
 
 SELECT *
 FROM vw_sales_by_country;
+SELECT COUNT(*)
+FROM vw_sales_by_country;
 
 CREATE VIEW vw_top_products AS
 SELECT
     p.product_name,
-    SUM(oi.quantity) AS units_sold
+    SUM(oi.quantity) AS units_sold,
+    SUM(p.price * oi.quantity) AS total_revenue
 FROM products p
 INNER JOIN order_items oi
     ON p.product_id = oi.product_id
@@ -255,12 +359,15 @@ ORDER BY units_sold DESC
 LIMIT 1;
 
 -- 07 ETL_log
+
+DROP TABLE IF EXISTS etl_log;
+
 CREATE TABLE etl_log(
     log_id INT AUTO_INCREMENT PRIMARY KEY,
-    process_name VARCHAR(100),
-    execution_date DATETIME,
-    rows_processed INT,
-    status VARCHAR(20)
+    process_name VARCHAR(100) NOT NULL,
+    execution_date DATETIME NOT NULL,
+    rows_processed INT NOT NULL,
+    status VARCHAR(20) NOT NULL
 );
 
 -- Validaciones
@@ -424,16 +531,28 @@ LIMIT 1;
 SHOW PROCEDURE STATUS
 WHERE Db = 'retail_etl';
 
--- 09 Triggers de Auditoria
+-- 09 Triggers_Audit
+
+DROP TRIGGER IF EXISTS trg_customer_insert;
+DROP TRIGGER IF EXISTS trg_customer_update;
+DROP TRIGGER IF EXISTS trg_validate_quantity;
+
+DROP TABLE IF EXISTS audit_customer_updates;
+DROP TABLE IF EXISTS audit_customers;
+
+-- Audit table for customer insertions
+
 CREATE TABLE audit_customers(
-	audit_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id INT,
-    action_type VARCHAR(20),
-    action_date DATETIME
+    audit_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    action_type VARCHAR(20) NOT NULL,
+    action_date DATETIME NOT NULL
 );
 
--- Validacion
+-- Validation
 DESCRIBE audit_customers;
+
+-- Trigger: Audit of new clients
 
 DELIMITER $$
 
@@ -443,150 +562,191 @@ ON customers
 FOR EACH ROW
 BEGIN
 
-	INSERT INTO audit_customers
+    INSERT INTO audit_customers
     (
-			customer_id,
-            action_type,
-            action_date
-    )VALUES
+        customer_id,
+        action_type,
+        action_date
+    )
+    VALUES
     (
-		NEW.customer_id,
+        NEW.customer_id,
         'INSERT',
         NOW()
     );
-    
+
 END $$
 
 DELIMITER ;
 
--- Validacion 
+-- Validation
 SHOW TRIGGERS;
 
--- Probar Trigger
-INSERT INTO customers 
+-- In case it already exists, clear records before testing
+DELETE FROM customers
+WHERE customer_id IN (99,100);
+
+-- Test
+INSERT INTO customers
+(
+    customer_id,
+    customer_name,
+    email,
+    country
+)
 VALUES
 (
-	99,
+    99,
     'Test Customer',
     'testcustomer@gmail.com',
     'Mexico'
 );
 
--- Verificar auditoria
+-- Verification
 SELECT *
 FROM audit_customers;
 
--- Otra prueba
+-- Second test
 INSERT INTO customers
+(
+    customer_id,
+    customer_name,
+    email,
+    country
+)
 VALUES
 (
-	100,
+    100,
     'Audit Test',
     'audittest@gmail.com',
     'Canada'
 );
 
--- verificacion
+-- Verification
 SELECT *
 FROM audit_customers
 ORDER BY audit_id DESC;
 
--- Verificacion final
 SELECT COUNT(*)
 FROM audit_customers;
 
+-- Audit table for updates
+
 CREATE TABLE audit_customer_updates(
-	audit_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id INT,
+    audit_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
     old_name VARCHAR(100),
     new_name VARCHAR(100),
-    update_date DATETIME
+    update_date DATETIME NOT NULL
 );
 
--- Trigger
+-- Validation
+DESCRIBE audit_customer_updates;
+
+-- Trigger: Name change audit
+
 DELIMITER $$
 
 CREATE TRIGGER trg_customer_update
-AFTER UPDATE 
+AFTER UPDATE
 ON customers
 FOR EACH ROW
 BEGIN
 
-	INSERT INTO audit_customer_updates
-    (
-        customer_id,
-        old_name,
-        new_name,
-        update_date
-    )VALUES(
-		OLD.customer_id,
-        OLD.customer_name,
-        NEW.customer_name,
-        NOW()
-    );
+    IF OLD.customer_name <> NEW.customer_name THEN
+
+        INSERT INTO audit_customer_updates
+        (
+            customer_id,
+            old_name,
+            new_name,
+            update_date
+        )
+        VALUES
+        (
+            OLD.customer_id,
+            OLD.customer_name,
+            NEW.customer_name,
+            NOW()
+        );
+
+    END IF;
 
 END $$
 
 DELIMITER ;
 
--- Validar
+-- Test
 UPDATE customers
 SET customer_name = 'Paco Torres'
 WHERE customer_id = 1;
 
--- VERIFICAR
+-- Verification
 SELECT *
 FROM audit_customer_updates;
 
--- Trigger
+-- Trigger: Product quantity validation
+
 DELIMITER $$
 
 CREATE TRIGGER trg_validate_quantity
-BEFORE INSERT 
+BEFORE INSERT
 ON order_items
 FOR EACH ROW
 BEGIN
 
-	IF NEW.quantity <= 0 THEN
-    
-		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Qauantity must be greater than zero';
-        
-	END IF;
-    
+    IF NEW.quantity <= 0 THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Quantity must be greater than zero';
+
+    END IF;
+
 END $$
 
 DELIMITER ;
 
--- verificacion 
+-- Validation
 SHOW TRIGGERS;
 
--- Prueba 
+-- Valid test
 INSERT INTO order_items
+(
+    order_item_id,
+    order_id,
+    product_id,
+    quantity
+)
 VALUES
 (
-	99,
+    99,
     1001,
     101,
     1
 );
 
--- Verificacion
+-- Verification
 SELECT *
 FROM order_items
 WHERE order_item_id = 99;
 
--- Prueba invalida
+-- Invalid test
 INSERT INTO order_items
+(
+    order_item_id,
+    order_id,
+    product_id,
+    quantity
+)
 VALUES
 (
-	100,
+    100,
     1001,
     101,
     -5
 );
 
--- Validacion final
+-- Final verification
 SELECT *
 FROM order_items
 WHERE order_item_id = 100;
