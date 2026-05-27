@@ -1,5 +1,6 @@
 # Project Architecture
 
+```text
 retail-etl/
 │
 ├── sql/
@@ -18,6 +19,8 @@ retail-etl/
 │   └── screenshots/
 │
 └── README.md
+```
+
 
 ## Raw Layer
 
@@ -29,6 +32,7 @@ Contains the source tables:
 
 Purpose:
 Store incoming data in its original format before any transformation is applied.
+
 
 ## Staging Layer
 
@@ -42,6 +46,7 @@ Transformations:
 Purpose:
 Perform data cleansing before loading records into the core model.
 
+
 ## Core Layer
 
 Contains:
@@ -53,6 +58,7 @@ Contains:
 Purpose:
 Store clean and structured business data using relational integrity constraints.
 
+
 ## Analytics Layer
 
 Views:
@@ -62,6 +68,7 @@ Views:
 
 Purpose:
 Provide aggregated business metrics for reporting and analysis.
+
 
 ## Stored Procedures Layer
 
@@ -74,6 +81,7 @@ Procedures:
 Purpose:
 Automate ETL operations, incremental loads and analytical queries.
 
+
 ## Monitoring Layer
 
 Table:
@@ -81,6 +89,7 @@ Table:
 
 Purpose:
 Track ETL executions, processed rows, and execution status.
+
 
 ## Audit & Validation Layer
 
